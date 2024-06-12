@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>crittercam</title>
+    <!-- Include Video.js CSS -->
+    <link href="https://vjs.zencdn.net/7.11.8/video-js.css" rel="stylesheet">
+    <!-- include bootstrap css -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+
+    <!-- Include Video.js Library -->
+    <script src="https://vjs.zencdn.net/7.11.8/video.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.slim.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/aws-sdk/2.490.0/aws-sdk.min.js"></script>
+    
+</head>
+<body>
+    <div class="container mb-3">
+        <div class="main">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label> Access Key </label>
+                        <input id="accessKeyId" type="password" class="form-control form-control-sm"/>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label> Secret Key </label>
+                        <input id="secretKey" type="password" class="form-control form-control-sm"/>
+                    </div>
+                
+                    <button id="start" type="submit" class="btn btn-primary">Start Playback</button>    
+                </div>
+                <div class="col-md-8">
+                    <div id="player">
+                        <!-- Video Player Container -->
+                        <video id="kinesis-video" class="video-js vjs-default-skin" controls autoplay width="640" height="360">
+                            <!-- Video Source -->
+                            <source src="" type="application/webrtc">
+                        </video>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $('#start').click(function(){
+            let streamName = 'stream1';
+
+            var options = {
+                accessKeyId: $('#accessKeyId').val(),
+                secretAccessKey: $('#secretKey').val(),
+                sessionToken: undefined,
+                region: 'us-east-2',
+                endpoint: undefined,
+            };
+
+            console.log('options', JSON.stringify(options));
+            console.log('options', $('#accessKeyId').val());
+
+            var kinesisVideo = new AWS.KinesisVideo(options);
+            var kinesisVideoArchivedContent = new AWS.KinesisVideoArchivedMedia(options);
+            
+            console.log('fetching data endpoint');
+            kinesisVideo.getDataEndpoint({
+                StreamName: streamName,
+                APIName: 'GET_HLS_STREAMING_SESSION_URL'
+            }, function(err, response) {
+                if (err) {
+                    return console.error(err);
+                }
+                console.log('endpoint received: ' + response.DataEndpoint);
+
+                kinesisVideoArchivedContent.endpoint = new AWS.Endpoint(response.DataEndpoint);
+
+                console.log('fetching HLS URL');
+
+                kinesisVideoArchivedContent.getHLSStreamingSessionURL({
+                    StreamName: streamName,
+                    PlaybackMode: 'LIVE',
+                    HLSFragmentSelector: {
+                        FragmentSelectorType: 'SERVER_TIMESTAMP',
+                        TimestampRange: undefined
+                    },
+                    ContainerFormat: 'FRAGMENTED_MP4',
+                    DiscontinuityMode: 'ALWAYS',
+                    DisplayFragmentTimestamp: 'NEVER',
+                    MaxMediaPlaylistFragmentResults: null,
+                    Expires: null,
+                }, function(err, response) {
+                    if (err) {
+                        return console.error(err);
+                    }
+                    console.log('HLS Streaming Session URL: ' + response.HLSStreamingSessionURL);
+                    console.log('response: ' + JSON.stringify(response));
+
+                    // Initialize Video.js
+                    var player = videojs('kinesis-video');
+                    player.src({
+                        src: response.HLSStreamingSessionURL,
+                        type: 'application/x-mpegURL'
+                    });
+
+                    // Add event listeners for error handling
+                    player.on('error', function (e) {
+                        console.error('Video.js error:', e);
+                    });
+                    player.play();
+                });
+            });
+        });
+    </script>
+    <script src="reload.js"></script>
+</body>
+</html>
